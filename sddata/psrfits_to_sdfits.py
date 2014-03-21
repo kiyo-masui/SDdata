@@ -1230,7 +1230,7 @@ class DataChecker(object) :
 
 
 def read_data(fname, pipe, feedback=2):
-    """Wraper for reading fits files.  Used to avoind pyfits memory leak."""
+    """Wraper for reading fits files.  Used to avoid pyfits memory leak."""
     Reader = fitsGBT.Reader(fname, feedback=feedback)
     Blocks = Reader.read((), (), force_tuple=True)
     pipe.send(Blocks)

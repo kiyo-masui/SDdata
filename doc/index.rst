@@ -11,6 +11,8 @@ Modules
 .. autosummary::
     :toctree: generated/
 
+    fits
+
 
 
 Scripts

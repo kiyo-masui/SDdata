@@ -4,6 +4,11 @@ SDdata
 
 Formats and conversions for data from single dish radio telescopes.
 
+This package contains various data containers and representations for data 
+from single dish radio telescopes, as well as support for reading them to and
+from disk in FITS and HDF5 formats.
+
+
 Installation
 ============
 

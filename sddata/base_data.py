@@ -1,21 +1,22 @@
 """Base class for variouse data containers."""
 
-import scipy as sp
+import numpy as np
 import numpy.ma as ma
 
-import kiyopy.custom_exceptions as ce
-import utils.misc as utils
 from hist import History, merge_histories
 
-class BaseData(object) :
-    """This is a base class for variouse Data Containers which are intended to
+class BaseFitsData(object):
+    """Abstract base class for in-memory representations of FITS data.
+    
+    This is a base class for variouse Data Containers which are intended to
     hold data contained in fits files (maps, scans, etc.).
+    
     """
     
     # This should be overwritten by classes inheriting from this one.
     axes = ()
 
-    def __init__(self, data=None, copy=True) :
+    def __init__(self, data=None, copy=True):
         """Can either be initialized with a raw data array or with None"""
         
         # Dictionary that holds all data other than .data.  This is safe to 
@@ -37,19 +38,19 @@ class BaseData(object) :
         self.history = History()
 
         if data is None :
-            self.data = ma.zeros(tuple(sp.zeros(len(self.axes))), float)
+            self.data = ma.zeros(tuple(np.zeros(len(self.axes))), float)
             self.data_set = False
         else :
             self.set_data(data, copy=copy)
 
-    def set_data(self, data, copy=True) :
+    def set_data(self, data, copy=True):
         """Set the data to passed array."""
         # Feel free to play around with the precision.
-        self.data = ma.array(data, dtype=sp.float64, copy=copy)
+        self.data = ma.array(data, dtype=np.float64, copy=copy)
         self.data_set = True
-        self.dims = sp.shape(data)
+        self.dims = np.shape(data)
 
-    def set_field(self, field_name, field_data, axis_names=(), format=None) :
+    def set_field(self, field_name, field_data, axis_names=(), format=None):
         """Set field data to be stored.
 
         Note that these operation can also be done by accessing the 'field' and
@@ -64,30 +65,33 @@ class BaseData(object) :
         documentation).
         """
 
-        if type(axis_names) is str :
+        field_data = np.array(field_data)
+        if type(axis_names) is str:
             a_names = (axis_names,)
-        else :
+        else:
             a_names = axis_names
         if not format:
-            if field_data.dtype == sp.float64:
+            if field_data.dtype == np.float64:
                 format = 'D'
-            elif field_data.dtype == sp.float32:
+            elif field_data.dtype == np.float32:
                 format = 'E'
-            elif field_data.dtype == sp.int16:
+            elif field_data.dtype == np.int16:
                 format = 'I'
-            elif field_data.dtype == sp.int32:
+            elif field_data.dtype == np.int32:
                 format = 'J'
-            elif field_data.dtype == sp.int64:
+            elif field_data.dtype == np.int64:
                 format = 'K'
-            elif field_data.dtype == sp.complex64:
+            elif field_data.dtype == np.complex64:
                 format = 'C'
-            elif field_data.dtype == sp.complex128:
+            elif field_data.dtype == np.complex128:
                 format = 'M'
             else:
-                raise ce.DataError("dtype not understood.")
+                msg = ("Could not interpret array dtype as a FITS format."
+                       " Please explicitly supply *format* argument.")
+                raise ValueError(msg)
         
         self._verify_single_axis_names(a_names)
-        self.field[field_name] = sp.array(field_data)
+        self.field[field_name] = field_data
         self.field_axes[field_name] = tuple(a_names)
         self.field_formats[field_name] = str(format)
 
@@ -95,17 +99,17 @@ class BaseData(object) :
         axis_indices = []
         temp_axes = list(self.axes)
         for name in axis_names :
-            if not name in temp_axes :
+            if not name in temp_axes:
                 raise ValueError("Field axes must contain only entries from: ",
                                  str(self.axes))
             temp_axes.remove(name)
             axis_indices.append(list(self.axes).index(name))
         sorted = list(axis_indices)
         sorted.sort()
-        if not axis_indices == sorted :
+        if not axis_indices == sorted:
             raise ValueError("Field axes must be well sorted.")
 
-    def verify(self) :
+    def verify(self):
         """Verifies that all the data is consistant.
 
         This method should be run every time you muck around with the data
@@ -118,7 +122,7 @@ class BaseData(object) :
         """
         
         if self.data_set :
-            self.dims = sp.shape(self.data)
+            self.dims = np.shape(self.data)
         else :
             raise RunTimeError('Data needs to be set before running verify()')
 
@@ -139,7 +143,7 @@ class BaseData(object) :
             axes = self.field_axes[field_name] # for saving keystrokes only
             self._verify_single_axis_names(axes)
             # Check the shape.
-            field_data_shape = sp.shape(self.field[field_name])
+            field_data_shape = np.shape(self.field[field_name])
             for ii in range(len(axes)) :
                 axis_ind = list(self.axes).index(axes[ii])
                 if field_data_shape[ii] != self.dims[axis_ind] :
@@ -159,12 +163,12 @@ class BaseData(object) :
             raise ce.DataError("Dictionaries 'field', 'field_axes' and "
                                "field_formats must have the same keys.")
 
-    def add_history(self, history_entry, details=()) :
+    def add_history(self, history_entry, details=()):
         """Adds a history entry."""
         
         self.history.add(history_entry, details=details)
 
-    def print_history(self) :
+    def print_history(self):
         """print_history function called on self.history."""
 
         self.history.display()

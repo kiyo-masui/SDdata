@@ -70,7 +70,7 @@ card_hist = 'DB-HIST'
 card_detail = 'DB-DET'
 
 
-class Reader(object) :
+class Reader(object):
     """Class that opens a GBT Spectrometer Fits file and reads data.
 
     This class opens the a GBT Fits File upon initialization and closes it upon
@@ -89,7 +89,7 @@ class Reader(object) :
     # going to modify should be forced to assign by value with the
     # sp.array(an_array) function.
 
-    def __init__(self, fname, feedback=2, checking=1, memmap=False) :
+    def __init__(self, fname, feedback=2, checking=1, memmap=False):
         """Init script for the fitsGBT Reader class.
 
         The reader is initialised with the fits file name to be read.
@@ -109,9 +109,9 @@ class Reader(object) :
 
         # The passed file name is assumed to be a GBT spectrometer fits file.
         self.hdulist = pyfits.open(self.fname, 'readonly', memmap=memmap)
-        if len(self.hdulist) < 2 :
+        if len(self.hdulist) < 2:
             raise ce.DataError("File missing data extension")
-        if self.feedback > 0 :
+        if self.feedback > 0:
             print "Opened GBT fits file: ", ku.abbreviate_file_path(fname)
         # Separate in to the useful sub objects.  These assignments are all
         # done by reference, so this is efficient.
@@ -134,7 +134,7 @@ class Reader(object) :
         self.IF_set = sp.unique(self._IFs_all)
         self.IF_set.sort()
 
-    def get_scan_IF_inds(self, scan_ind, IF_ind) :
+    def get_scan_IF_inds(self, scan_ind, IF_ind):
         """Gets the record indices of the fits file that correspond to the
         given scan and IF.
 
@@ -161,55 +161,55 @@ class Reader(object) :
             # We expect noise cal to be on for every second record.
             for thecal in range(ncal) :
                 tmp = sp.unique(self.fitsdata.field('CAL')[inds_sif[:,:,thecal]])
-                if len(tmp) > 1 :
+                if len(tmp) > 1:
                     raise ce.DataError("Calibration (ON/OFF) not in "
                                     "perfect order in file: "+self.fname)
             # Polarization should cycle through 4 modes (-5,-7,-8,-6)
-            for thepol in range(npol) :
+            for thepol in range(npol):
                 tmp = sp.unique(self.fitsdata.field('CRVAL4')
                             [inds_sif[:,thepol,:]])
-                if len(tmp) > 1 :
+                if len(tmp) > 1:
                     raise ce.DataError("Polarizations not in perfect order in "
                                     "file: "+self.fname)
             # We expect the entries to be sorted in time and for time to not
             # change across pol and cal.
             lastLST = 0
-            for ii in range(ntimes) :
+            for ii in range(ntimes):
                 # Sometimes won't have the LST.
-                try :
+                try:
                     thisLST = self.fitsdata.field('LST')[inds_sif[ii,0,0]]
                 # If 'LST' is missing raises a KeyError in later versions of
                 # pyfits, and a NameError in earlier ones.
-                except (KeyError, NameError) :
+                except (KeyError, NameError):
                     break
                 if not (sp.allclose(self.fitsdata.field('LST')
-                        [inds_sif[ii,:,:]] - thisLST, 0)) :
+                        [inds_sif[ii,:,:]] - thisLST, 0)):
                     raise ce.DataError("LST change across cal or pol in "
                                        "file: " + self.fname)
 
         return inds_sif
 
-    def set_history(self, Block) :
+    def set_history(self, Block):
         """Reads the file history and sets the corresponding Block history."""
 
         prihdr = self.hdulist[0].header
         # If there is no history, return.
-        try :
+        try:
             ii = prihdr.ascardlist().index_of(card_hist)
-        except KeyError :
+        except KeyError:
             return
         n_cards = len(prihdr.ascardlist().keys())
         while ii < n_cards :
-            if prihdr.ascardlist().keys()[ii] == card_hist :
+            if prihdr.ascardlist().keys()[ii] == card_hist:
                 hist_entry = prihdr[ii]
                 details = []
-            elif prihdr.ascardlist().keys()[ii] == card_detail :
+            elif prihdr.ascardlist().keys()[ii] == card_detail:
                 details.append(prihdr[ii])
             ii = ii + 1
-            if ii == n_cards or prihdr.ascardlist().keys()[ii] == card_hist :
+            if ii == n_cards or prihdr.ascardlist().keys()[ii] == card_hist:
                 Block.add_history(hist_entry, details)
 
-    def read(self, scans=None, bands=None, force_tuple=False, IFs=None) :
+    def read(self, scans=None, bands=None, force_tuple=False, IFs=None):
         """Read in data from the fits file.
 
         This method reads data from the fits file including the files history
@@ -246,23 +246,23 @@ class Reader(object) :
         if not bands is None and IFs is None:
             IFs = bands
         # We want scans and IFs to be a sequence of indicies.
-        if scans is None :
+        if scans is None:
             scans = range(len(self.scan_set))
-        elif not hasattr(scans, '__iter__') :
-            scans = (scans, )
-        elif len(scans) == 0 :
+        elif not hasattr(scans, '__iter__'):
+            scans = (scans,)
+        elif len(scans) == 0:
             scans = range(len(self.scan_set))
-        if IFs is None :
+        if IFs is None:
             IFs = range(len(self.IF_set))
-        elif not hasattr(IFs, '__iter__') :
-            IFs = (IFs, )
+        elif not hasattr(IFs, '__iter__'):
+            IFs = (IFs,)
         elif len(IFs) == 0 :
             IFs = range(len(self.IF_set))
         
         # Sequence of output DataBlock objects.
         output = ()
-        for scan_ind in scans :
-            for IF_ind in IFs :
+        for scan_ind in scans:
+            for IF_ind in IFs:
                 # Choose the appropriate records from the file, get that data.
                 inds_sif = self.get_scan_IF_inds(scan_ind, IF_ind)
                 Data_sif = db.DataBlock(self.fitsdata.field('DATA')[inds_sif])
@@ -320,13 +320,13 @@ class Reader(object) :
         else :
             return output
 
-    def __del__(self) :
+    def __del__(self):
         self.hdulist.close()
-        if self.feedback > 3 :
+        if self.feedback > 3:
             print "Closed ", self.fname
 
 
-class Writer() :
+class Writer():
     """Class that writes data back to fits files.
 
     This class acculumates data stored in DataBlock objects using the
@@ -334,7 +334,7 @@ class Writer() :
     she can then call the 'write(file_name)' method to write it to file.
     """
     
-    def __init__(self, Blocks=None, feedback=2) :
+    def __init__(self, Blocks=None, feedback=2):
         """Init script for the fitsGBT Writer.
 
         The writer can optionally be initialized with a sequence of DataBlock
@@ -359,13 +359,13 @@ class Writer() :
         data which can eventually be written as a fits file.
         """
 
-        if not hasattr(Blocks, '__iter__') :
+        if not hasattr(Blocks, '__iter__'):
             self._add_single_block(Blocks)
         else :
-            for Block in Blocks :
+            for Block in Blocks:
                 self._add_single_block(Block)
 
-    def _add_single_block(self, Block) :
+    def _add_single_block(self, Block):
         """Adds all the data in a DataBlock Object to the Writer such that it
         can be written to a fits file eventually."""
         
@@ -420,7 +420,7 @@ class Writer() :
                                        ' and field: ' + field)
         self.first_block_added = False
 
-    def write(self, file_name) :
+    def write(self, file_name):
         """Write stored data to file.
         
         Take all the data stored in the Writer (from added DataBlocks) and

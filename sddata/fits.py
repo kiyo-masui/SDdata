@@ -1,7 +1,7 @@
 """
 Tools and representations of the SDFITS data format.
 
-.. currentmodule:: sddata.sdfits
+.. currentmodule:: sddata.fits
 
 This module provides tools and representations for the SDFITS data format.
 This includes tools for reading and writing SDFITS files, representing them in
@@ -12,16 +12,43 @@ Unfortunately this module is not currently very general and has been tailored
 to 'spectrometer' style data (i.e. spectra vs time) from the Green Bank
 Telescope's old spectrometer.
 
-Classes
-=======
+FITS Data Containers and IO
+===========================
 
 .. autosummary::
    :toctree: generated/
 
-    BaseFitsBlock
+    BaseFitsData
     DataBlock
     Reader
     Writer
+
+Auxiliary Classes
+=================
+
+.. autosummary::
+   :toctree: generated/
+    
+    History
+    DataError
+
+Functions
+=========
+
+.. autosummary::
+   :toctree: generated/
+
+    merge_histories
+
+Exceptions
+==========
+
+
+.. autosummary::
+   :toctree: generated/
+
+    DataError
+
 
 """
 
@@ -30,10 +57,14 @@ import numpy as np
 import numpy.ma as ma
 
 
+
+# Containers
+# ==========
+
 class BaseFitsData(object):
     """Abstract base class for in-memory representations of FITS data.
     
-    This is a base class for variouse Data Containers which are intended to
+    This is a base class for various Data Containers which are intended to
     hold data contained in fits files (maps, scans, etc.).
     
     """
@@ -135,10 +166,10 @@ class BaseFitsData(object):
             raise ValueError("Field axes must be well sorted.")
 
     def verify(self):
-        """Verifies that all the data is consistant.
+        """Verifies that all the data is consistent.
 
         This method should be run every time you muck around with the data
-        and field entries.  It simply checks that all the data is consistant
+        and field entries.  It simply checks that all the data is consistent
         (axes, lengths etc.).
 
         Note that even if you know that your DataBlock will pass the verify,
@@ -160,7 +191,7 @@ class BaseFitsData(object):
             # done outside this loop.
             if ((not self.field_axes.has_key(field_name)) or 
                 (not self.field_formats.has_key(field_name))) :
-                raise ce.DataError("Dictionaries 'field', 'field_axes' and "
+                raise DataError("Dictionaries 'field', 'field_axes' and "
                                    "field_formats must have the same keys.")
             axes_keys.remove(field_name)
             format_keys.remove(field_name)
@@ -172,7 +203,7 @@ class BaseFitsData(object):
             for ii in range(len(axes)) :
                 axis_ind = list(self.axes).index(axes[ii])
                 if field_data_shape[ii] != self.dims[axis_ind] :
-                    raise ce.DataError("The shape of the data in one of the "
+                    raise DataError("The shape of the data in one of the "
                                        "fields is incompatible with the shape "
                                        "of the main data. field: "+field_name)
             # Check the format string.
@@ -181,11 +212,11 @@ class BaseFitsData(object):
             if not type(self.field_formats[field_name]) is str :
                 print type(self.field_formats[field_name])
                 print self.field_formats[field_name]
-                raise ce.DataError("The field_format must be type str. field: "
+                raise DataError("The field_format must be type str. field: "
                                    + field_name)
         # The opposite of the first check in the loop.
         if len(axes_keys) or len(format_keys) :
-            raise ce.DataError("Dictionaries 'field', 'field_axes' and "
+            raise DataError("Dictionaries 'field', 'field_axes' and "
                                "field_formats must have the same keys.")
 
     def add_history(self, history_entry, details=()):
@@ -199,26 +230,62 @@ class BaseFitsData(object):
         self.history.display()
 
 
-class History(dict) :
-    """Class that contains the history of a piece of data."""
+# IO
+# ==
 
-    def add(self, history_entry, details=()) :
+
+
+# Exceptions
+# ==========
+
+class DataError(Exception):
+    """Raised for issues with the internal consistency with the data."""
+
+
+# History Class
+# =============
+
+class History(dict) :
+    """Represents the history of a piece of data.
+    
+    Inherits from :class:`dict`.
+
+    A history entry consists of a key, which is a string, and a list of details
+    which are also strings.  The history keys are ordered my prefixing them
+    with a zero padded 3 digit integer.
+
+    The intent is to track piece of data through many levels of data
+    processing. This tracking is functional even when data with similar
+    histories are merged into a derived data product.
+    
+    Methods
+    -------
+    add
+    merge
+    write
+    display
+
+    """
+
+    def add(self, history_entry, details=()):
+        """Add a history entry.
+        
+        Parameters
+        ----------
+        history_entry : str
+            Describes the event of the history
+        details : sequence
+            Strings giving various details about the history entry.
+
+        """
 
         local_details = details
-        # Input checks.
-        #if len(history_entry) > 70 :
-        #    raise ValueError('History entries limited to 70 characters.')
         if type(details) is str :
-        #    if len(details) > 70 :
-        #        raise ValueError('History details limited to 70 characters.')
             local_details = (details, )
         for detail in details :
             if not type(detail) is str :
-                raise TypeError('History details must be a squence of strings'
+                raise TypeError('History details must be a sequence of strings'
                                 ' or a single string.')
-            #if len(detail) > 70 :
-            #    raise ValueError('History details limited to 70 characters.')
-
         n_entries = len(self)
         # '+' operator performs input type check.
         hist_str = ('%03d: ' % n_entries) + history_entry
@@ -236,7 +303,18 @@ class History(dict) :
                 print '    ' + detail
 
     def merge(self, *args) :
-        """Merge this History object with ones passed to this function."""
+        """Merge this multiple :class:`History` objects into this one.
+        
+        To be mergable, all :class:`History` objects must have identical
+        'entries' (keys) but the 'details' (values) or each entry may differ.
+
+        Parameters
+        ----------
+        *args : sequence
+            Any number of :class:`History` objects or objects with an attribute
+            :attr:`history`, which is a :class:`History` object.
+        
+        """
 
         for obj in args :
             if hasattr(obj, 'history') :
@@ -253,7 +331,7 @@ class History(dict) :
                                          " identical keys.")
 
     def write(self, fname) :
-        """Write this history to disk"""
+        """Write this history to disk."""
 
         f = open(fname, 'w')
         
@@ -272,23 +350,25 @@ class History(dict) :
         finally :
             f.close()
 
-def read_history(fname) :
-    """Read a History object from file."""
-
-    f = open(fname, 'r')
-    try :
-        filestring = f.read()
-    finally :
-        f.close()
-    return History(eval(filestring))
-
 def merge_histories(*args) :
-    """Merges DataBlock histories.
+    """Merge :class:`History` objects.
+    
+    Parameters
+    ----------
+    *args : sequence
+        Any number of :class:`History` objects or objects with an attribute
+        :attr:`history`, which is a :class:`History` object.
+    
+    Returns
+    -------
+    history : :class:`History`
+        A new history that is the merger of the input histories.
 
-    This function accepts an arbitray number of History objects (or classes
-    containing a history object in a 'history' attribute), and returns a 
-    history dictionary that is a merger of them.  History keys must match; 
-    details are added."""
+    See Also
+    --------
+    :meth:`History.merge`
+    
+    """
     
     if hasattr(args[0], 'history') :
         history = History(args[0].history)

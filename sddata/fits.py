@@ -63,7 +63,6 @@ class BaseFitsBlock(object):
 
     Methods
     -------
-    set_data
     set_field
     verify
     add_history
@@ -93,7 +92,7 @@ class BaseFitsBlock(object):
     def history(self):
         return self._history
 
-    def __init__(self, data=None, copy=True):
+    def __init__(self, data, copy=True):
         """Can either be initialized with a raw data array or with None"""
         
         # Dictionary that holds all data other than .data.  This is safe to 
@@ -102,14 +101,9 @@ class BaseFitsBlock(object):
 
         self._history = History()
 
-        if data is None :
-            self._data = ma.zeros((0,) * len(self.axes), float)
-        else :
-            self.set_data(data, copy=copy)
-
-    def set_data(self, data, copy=True):
-        """Set the data to passed array."""
-        # Feel free to play around with the precision.
+        if data.ndim != len(self.axes):
+            raise ValueError("Data incompatible with axes: %s."
+                             % str(self.axes))
         self._data = ma.array(data, dtype=np.float64, copy=copy)
 
     def set_field(self, field_name, field_data, axis_names=(), format=None):
@@ -129,9 +123,7 @@ class BaseFitsBlock(object):
 
         field_data = np.array(field_data)
         if type(axis_names) is str:
-            a_names = (axis_names,)
-        else:
-            a_names = axis_names
+            axis_names = (axis_names,)
         if not format:
             if field_data.dtype == np.float64:
                 format = 'D'
@@ -147,27 +139,52 @@ class BaseFitsBlock(object):
                 format = 'C'
             elif field_data.dtype == np.complex128:
                 format = 'M'
+            elif str(field_data.dtype)[:2] == '|S':
+                l = int(str(field_data.dtype)[2:])
+                format = '%dA' % l
             else:
                 msg = ("Could not interpret array dtype as a FITS format."
                        " Please explicitly supply *format* argument.")
                 raise ValueError(msg)
         
-        self._verify_single_axis_names(a_names)
-        self.field[field_name] = Field(field_data, tuple(a_names), str(format))
+        field = Field(field_data, tuple(axis_names), str(format))
+        try:
+            self._verify_field(field)
+        except DataError as e:
+            raise ValueError(e.args[0])
+        self.field[field_name] = field
 
-    def _verify_single_axis_names(self, axis_names) :
+    def _verify_field(self, field):
+        axis_names = field.axes
+        format = field.format
+
+        # Check the axis names.
         axis_indices = []
         temp_axes = list(self.axes)
         for name in axis_names :
             if not name in temp_axes:
-                raise ValueError("Field axes must contain only entries from: ",
-                                 str(self.axes))
+                raise DataError("Field axes must contain only entries from: %s."
+                                % str(self.axes))
             temp_axes.remove(name)
             axis_indices.append(list(self.axes).index(name))
         sorted = list(axis_indices)
         sorted.sort()
         if not axis_indices == sorted:
-            raise ValueError("Field axes must be well sorted.")
+            raise DataError("Field axes must be well sorted.")
+        
+        # Check the shape.
+        field_data_shape = field.shape
+        for ii in range(len(axis_names)) :
+            axis_ind = list(self.axes).index(axis_names[ii])
+            if field_data_shape[ii] != self.data.shape[axis_ind] :
+                raise DataError("Shape of field incompatible with the shape"
+                                " of data.")
+        # Check the format string.
+        # TODO: This should do something better than just check that there
+        # is a string.
+        if not type(field.format) is str :
+            raise DataError("The field format must be a string.")
+
 
     def verify(self):
         """Verifies that all the data is consistent.
@@ -181,46 +198,13 @@ class BaseFitsBlock(object):
         messing with the data.  It then sets some internal variables.
         """
         
-        if not self.data.size :
-            raise RunTimeError('Data needs to be set before running verify()')
-
-        # Will delete these keys if they are found in 'field', then see if any
-        # are left over.
-        axes_keys = self.field_axes.keys()
-        format_keys = self.field_formats.keys()
-        for field_name in self.field.iterkeys() :
-            # Check for keys in fields and not in field_axes, the oposite is
-            # done outside this loop.
-            if ((not self.field_axes.has_key(field_name)) or 
-                (not self.field_formats.has_key(field_name))) :
-                raise DataError("Dictionaries 'field', 'field_axes' and "
-                                   "field_formats must have the same keys.")
-            axes_keys.remove(field_name)
-            format_keys.remove(field_name)
-            # Check all the axes
-            axes = self.field_axes[field_name] # for saving keystrokes only
-            self._verify_single_axis_names(axes)
-            # Check the shape.
-            field_data_shape = np.shape(self.field[field_name])
-            for ii in range(len(axes)) :
-                axis_ind = list(self.axes).index(axes[ii])
-                if field_data_shape[ii] != self.dims[axis_ind] :
-                    raise DataError("The shape of the data in one of the "
-                                       "fields is incompatible with the shape "
-                                       "of the main data. field: "+field_name)
-            # Check the format string.
-            # TODO: This should do something better than just check that there
-            # is a string.
-            if not type(self.field_formats[field_name]) is str :
-                print type(self.field_formats[field_name])
-                print self.field_formats[field_name]
-                raise DataError("The field_format must be type str. field: "
-                                   + field_name)
-        # The opposite of the first check in the loop.
-        if len(axes_keys) or len(format_keys) :
-            raise DataError("Dictionaries 'field', 'field_axes' and "
-                               "field_formats must have the same keys.")
-
+        for field_name, field in self.field.items():
+            try:
+                self._verify_field(field)
+            except DataError as e:
+                e.args[0] = e.args[0] + " Field name: %s." % field_name
+                raise e
+        
     def add_history(self, history_entry, details=()):
         """Adds a history entry."""
         
@@ -232,7 +216,7 @@ class BaseFitsBlock(object):
         self.history.display()
 
 
-def Field(np.ndarray):
+class Field(np.ndarray):
     """Represents any 'field' data from a fits file except the "DATA" field.
 
     Parameters
@@ -275,10 +259,10 @@ def Field(np.ndarray):
 # Spectrometer
 # ============
 
-class SpecBlock(base_data.BaseData) :
+class SpecBlock(BaseFitsBlock) :
     """Class that holds an single IF and scan of GBT data.
 
-    Inherits from :class:`BaseFitsData`.
+    Inherits from :class:`BaseFitsBlock`.
 
     This is the main vessel for storing an transporting GBT data.  This class
     can be used with the fitsGBT.py module to be read and written as a properly
@@ -306,12 +290,15 @@ class SpecBlock(base_data.BaseData) :
 
 
 
-
 # Exceptions
 # ==========
 
 class DataError(Exception):
     """Raised for issues with the internal consistency with the data."""
+
+
+class HistoryError(Exception):
+    """Raised for issues with history tracking."""
 
 
 # History Class
@@ -399,7 +386,7 @@ class History(dict) :
                         if not detail in self[entry] :
                             self[entry] = self[entry] + (detail, )
                     except KeyError :
-                        raise ValueError("Histories to be merged must have"
+                        raise HistoryError("Histories to be merged must have"
                                          " identical keys.")
 
     def write(self, fname) :

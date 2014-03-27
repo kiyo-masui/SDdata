@@ -12,43 +12,28 @@ Unfortunately this module is not currently very general and has been tailored
 to 'spectrometer' style data (i.e. spectra vs time) from the Green Bank
 Telescope's old spectrometer.
 
-FITS Data Containers and IO
-===========================
+Base Classes and Infrastructure
+===============================
 
 .. autosummary::
    :toctree: generated/
 
-    BaseFitsData
-    DataBlock
-    Reader
-    Writer
+    BaseFitsBlock
+    Field
+    History
+    merge_histories
+    DataError
 
-Auxiliary Classes
-=================
+
+Spectrometer Type Data
+======================
 
 .. autosummary::
    :toctree: generated/
     
-    History
-    DataError
-
-Functions
-=========
-
-.. autosummary::
-   :toctree: generated/
-
-    merge_histories
-
-Exceptions
-==========
-
-
-.. autosummary::
-   :toctree: generated/
-
-    DataError
-
+    SpecBlock
+    SpecReader
+    SpecWriter
 
 """
 
@@ -61,50 +46,71 @@ import numpy.ma as ma
 # Containers
 # ==========
 
-class BaseFitsData(object):
+class BaseFitsBlock(object):
     """Abstract base class for in-memory representations of FITS data.
     
     This is a base class for various Data Containers which are intended to
     hold data contained in fits files (maps, scans, etc.).
     
+    Attributes
+    ----------
+    axes
+    data
+    field
+    field_axes
+    field_formats
+    history
+
+    Methods
+    -------
+    set_data
+    set_field
+    verify
+    add_history
+    print_history
+
     """
     
     # This should be overwritten by classes inheriting from this one.
-    axes = ()
+    @property
+    def axes(self):
+        """Names for the axes of :attr:`~BaseFitsData.data`.
+
+        """
+        return ()
+    
+    @property
+    def data(self):
+        """The data.
+        """
+        return self._data
+
+    @property
+    def field(self):
+        return self._field
+
+    @property
+    def history(self):
+        return self._history
 
     def __init__(self, data=None, copy=True):
         """Can either be initialized with a raw data array or with None"""
         
         # Dictionary that holds all data other than .data.  This is safe to 
         # be accessed and updated by the user.
-        self.field = {}
-        # Dictionary with the same keys as field but holds the axes over which
-        # a parameter varies.  For instance, the LST variable varies over the
-        # 'time' axis.  axes['LST'] should thus be ('time') and
-        # shape(field['LST']) should be (ntimes, ).
-        self.field_axes = {}
-        # To write data to fits you need a fits format for each field.
-        self.field_formats = {}
-        # Dictionary that holds the history of this data.  It's keys are
-        # history entries for hte data.  They must be strings starting with a
-        # three digit integer ennumerating the histories.  The corresponding
-        # values give additional details, held in a tuple of strings.  The
-        # intension is that when merging data, histories must be identical, but
-        # details can be merged.
-        self.history = History()
+        self._field = {}
+
+        self._history = History()
 
         if data is None :
-            self.data = ma.zeros(tuple(np.zeros(len(self.axes))), float)
-            self.data_set = False
+            self._data = ma.zeros((0,) * len(self.axes), float)
         else :
             self.set_data(data, copy=copy)
 
     def set_data(self, data, copy=True):
         """Set the data to passed array."""
         # Feel free to play around with the precision.
-        self.data = ma.array(data, dtype=np.float64, copy=copy)
-        self.data_set = True
-        self.dims = np.shape(data)
+        self._data = ma.array(data, dtype=np.float64, copy=copy)
 
     def set_field(self, field_name, field_data, axis_names=(), format=None):
         """Set field data to be stored.
@@ -147,9 +153,7 @@ class BaseFitsData(object):
                 raise ValueError(msg)
         
         self._verify_single_axis_names(a_names)
-        self.field[field_name] = field_data
-        self.field_axes[field_name] = tuple(a_names)
-        self.field_formats[field_name] = str(format)
+        self.field[field_name] = Field(field_data, tuple(a_names), str(format))
 
     def _verify_single_axis_names(self, axis_names) :
         axis_indices = []
@@ -177,9 +181,7 @@ class BaseFitsData(object):
         messing with the data.  It then sets some internal variables.
         """
         
-        if self.data_set :
-            self.dims = np.shape(self.data)
-        else :
+        if not self.data.size :
             raise RunTimeError('Data needs to be set before running verify()')
 
         # Will delete these keys if they are found in 'field', then see if any
@@ -230,8 +232,78 @@ class BaseFitsData(object):
         self.history.display()
 
 
-# IO
-# ==
+def Field(np.ndarray):
+    """Represents any 'field' data from a fits file except the "DATA" field.
+
+    Parameters
+    ----------
+    input_array : numpy array
+        Field data.
+    axes : tuple of strings
+        Names of the axes corresponding to the dimensions of *input_array*.
+    format : string
+        FITS format string.
+
+    """
+    
+    # Array creation procedure straight out of numpy documentation:
+    # http://docs.scipy.org/doc/numpy/user/basics.subclassing.html
+    def __new__(cls, input_array, axes, format):
+        obj = np.asarray(input_array).view(cls)
+        if len(axes) != obj.ndim:
+            raise ValueError("Number of axis names must match dimensions.")
+        if not isinstance(format, basestring):
+            raise TypeError("*format* must be a FITS data type string.")
+        obj._axes = axes
+        obj._format = format
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+        self._axes = getattr(obj, '_axes', None)
+        self._format = getattr(obj, '_format', None)
+
+    @property
+    def axes(self):
+        return self._axes
+
+    @property
+    def format(self):
+        return self._format
+
+
+# Spectrometer
+# ============
+
+class SpecBlock(base_data.BaseData) :
+    """Class that holds an single IF and scan of GBT data.
+
+    Inherits from :class:`BaseFitsData`.
+
+    This is the main vessel for storing an transporting GBT data.  This class
+    can be used with the fitsGBT.py module to be read and written as a properly
+    formatted fits file.  The raw data is accessed and updated through the
+    'data' and 'field' attributes of this class and associated hleper
+    functions.
+
+    Please remember that when working with the 'data' attribute, that it is a
+    numpy MaskedArray class, not a normal numpy array.  Take care to use the
+    masked versions of any numpy functions to preserve the mask.  This is
+    especially useful for flagging bad data and RFI.
+
+    Attributes
+    ----------
+    axes
+
+    """
+    
+    # These are the valid axes that a data field can vary over.  Any other
+    # field can vary over only the first three of these.
+    @property
+    def axes(self):
+        "Equals ``('time', 'chan', 'freq')``."
+        return ('time', 'chan', 'freq')
+
 
 
 

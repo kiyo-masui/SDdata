@@ -34,3 +34,11 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# Editor files and backups.
+*.swp
+*.swo
+
+# Documentation builds
+doc/_build
+doc/generated

@@ -158,6 +158,7 @@ nscan_gos = len(scans_gos)
 ntime_gos = 10
 npol_gos = len(pol_set)
 ncal_gos = len(cal_set)
+nchan_gos = npol_gos * ncal_gos
 nfreq_gos = 2048
 
 
@@ -250,6 +251,59 @@ class TestReaderGetIFScanInds(unittest.TestCase) :
     def tearDown(self) :
         del self.reader
 
+
+class TestReads(unittest.TestCase) :
+    """Some basic test for some know properties of the data in the test fits
+    file."""
+    
+    def setUp(self) :
+        self.reader = fits.SpecReader(testfile_gos)
+        self.block = self.reader.read(0, 0)[0]
+        self.block.verify()
+
+    def test_reads_valid_data(self):
+        s = self.block.data.shape
+        self.assertEqual(s, (ntime_gos, nchan_gos, nfreq_gos))
+        
+    def test_feilds(self) :
+        self.assertEqual(self.block.field['SCAN'], scans_gos[0])
+        self.assertEqual(round(self.block.field['CRVAL1'][0]/1e6), 695)
+        for ii in range(npol_gos) :
+            self.assertEqual(pol_set[ii], self.block.field['CRVAL4'][2*ii])
+        for ii in range(ncal_gos) :
+            self.assertEqual(cal_set[ii], self.block.field['CAL'][ii])
+        self.assertEqual(self.block.field['CRVAL1'].format, '1D')
+        self.assertEqual(self.block.field['CRVAL4'].format, '1I')
+        # Multi Dimensional field read.
+        self.assertEqual(self.block.field['EXPOSURE'].shape, 
+                         (ntime_gos, nchan_gos))
+        self.assertEqual(self.block.field['EXPOSURE'].axes, 
+                         ('time', 'chan'))
+
+    def tearDown(self) :
+        del self.reader
+        del self.block
+
+
+class TestMultiRead(unittest.TestCase) :
+    """Test that each scan and IF is read exactly 1 time by default."""
+    
+    def test_multiple_reads(self) :
+        nscan = len(scans_gos)
+        nband = len(bands_gos)
+        reader = fits.SpecReader(testfile_gos)
+        blocks = reader.read()
+        
+        self.assertEqual(len(blocks), nscan_gos*nband_gos)
+        # Lists multiplied by two because each scan shows up in 2 IFs.
+        scan_list = [scans_gos[0]] * 2 + [scans_gos[1]] * 2
+        band_list = 2 * bands_gos
+        for ii, block in enumerate(blocks):
+            block.verify()
+            the_scan = block.field['SCAN']
+            the_band = round(block.field['CRVAL1'][0], -4)
+            self.assertEqual(scan_list[ii], the_scan)
+            self.assertAlmostEqual(band_list[ii], the_band)
 
 
 

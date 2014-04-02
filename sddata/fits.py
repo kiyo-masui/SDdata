@@ -84,6 +84,7 @@ class BaseFitsBlock(object):
     Attributes
     ----------
     axes
+    shape
     data
     field
     field_axes
@@ -106,6 +107,11 @@ class BaseFitsBlock(object):
 
         """
         return ()
+
+    @property
+    def shape(self):
+        """``self.data.shape.``"""
+        return self.data.shape
     
     @property
     def data(self):
@@ -268,13 +274,13 @@ class Field(np.ndarray):
         if not isinstance(format, basestring):
             raise TypeError("*format* must be a FITS data type string.")
         obj._axes = axes
-        obj._format = format
+        obj._fits_format = format
         return obj
 
     def __array_finalize__(self, obj):
         if obj is None: return
         self._axes = getattr(obj, '_axes', None)
-        self._format = getattr(obj, '_format', None)
+        self._fits_format = getattr(obj, '_fits_format', None)
 
     @property
     def axes(self):
@@ -282,7 +288,7 @@ class Field(np.ndarray):
 
     @property
     def format(self):
-        return self._format
+        return self._fits_format
 
 
 # Spectrometer
@@ -356,7 +362,7 @@ class SpecReader(object):
     """Class that opens a Spectrometer Fits file and reads data.
 
     This class opens an SDFITS file upon initialization and closes it upon
-    deletion.  It contains routines for reading individual scans and IFs from
+    deletion.  It contains routines for reading individual scans and bands from
     the file.  This class reads data but does not store data.  Data is stored
     in :class:`SpecBlock` objects, which are returned by :meth:`read()`.
 
@@ -460,9 +466,9 @@ class SpecReader(object):
         thescan = self.scans[scan_ind]
         theband = self.bands[band_ind]
         
-        # Find all the records that correspond to this IF and this scan.
+        # Find all the records that correspond to this band and this scan.
         # These indices *should* now be ordered in time, cal (on off)
-        # and in polarization, once the IF is isolated.
+        # and in polarization, once the band is isolated.
         inds = np.logical_and(self._bands_all==theband, self._scans_all==thescan)
         records = np.array(self._fits_data[inds])  # Performs copy.
         if 'CAL' in self._field_names:
@@ -536,15 +542,12 @@ class SpecReader(object):
             if ii == n_cards or prihdr.ascardlist().keys()[ii] == card_hist:
                 Block.add_history(hist_entry, details)
 
-    def read(self, scans=None, bands=None, beams=None, force_tuple=False,
-             IFs=None) :
+    def read(self, scans=None, bands=None) :
         """Read in data from the fits file.
 
-        This method reads data from the fits file including the files history
-        and basically every peice of data that could be needed.  It is done,
-        one scan and one IF at a time.  Each scan and IF is returned in an
-        instance of the DataBlock class (defined in another module of this
-        package).
+        This method reads data from the fits file including the files history.
+        It is done one scan and one band at a time.  Each scan and band is
+        returned as an instance of :class:`SpecBlock` class.
 
         Parameters
         ----------
@@ -554,107 +557,70 @@ class SpecReader(object):
             Default is all of them.
         bands : tuple of integers
             Which intermediate frequencies (also called frequency windows)
-            to process.  A list of integers with 0 coorsponding to the 
+            to process.  A list of integers with 0 corresponding to the 
             lowest frequency present. Default is all of them.
-            TODO : Overlapping frequency windows stiched together somehow.
-        force_tuple: By default, if there is only a single output Data
-            Block, it is returned not wraped in a tuple, but if we want to
-            loop over the output we can force the output to be a tuple,
-            even if it only has one element.
-        IFs : tuple of integers
-            Depricated, use `bands`.
 
         Returns
         -------
-        Instance of the DataBlock class, or a tuple of these instances
-        (if asked for multiple scans and IFs).
+        blocks : list
+            List of :class:`SpecBlock` objects read from file.
         """
         
-        # `bands` and `IFs` is are two names for the same parameter.
-        if not bands is None and IFs is None:
-            IFs = bands
-        # We want scans and IFs to be a sequence of indicies.
+        # We want scans and bands to be a sequence of indicies.
         if scans is None :
-            scans = range(len(self.scan_set))
+            scans = range(len(self.scans))
         elif not hasattr(scans, '__iter__') :
             scans = (scans, )
         elif len(scans) == 0 :
-            scans = range(len(self.scan_set))
-        if IFs is None :
-            IFs = range(len(self.IF_set))
-        elif not hasattr(IFs, '__iter__') :
-            IFs = (IFs, )
-        elif len(IFs) == 0 :
-            IFs = range(len(self.IF_set))
-        if beams is None :
-            beams = range(len(self.beam_set))
-        elif not hasattr(beams, '__iter__') :
-            beams = (beams, )
-        elif len(beams) == 0 :
-            beams = range(len(self.beam_set))
-
+            scans = range(len(self.scans))
+        if bands is None :
+            bands = range(len(self.bands))
+        elif not hasattr(bands, '__iter__') :
+            bands = (bands, )
+        elif len(bands) == 0 :
+            bands = range(len(self.bands))
         
-        # Sequence of output DataBlock objects.
-        output = ()
+        logger.info("Reading scans %s and bands %s" % (str(scans), str(bands)))
+        blocks = []    # Sequence of output SpecBlock objects.
         for scan_ind in scans :
-            for IF_ind in IFs :
-                for beam_ind in beams:
-                    # Choose the appropriate records from the file, get that data.
-                    inds_sif = self.get_scan_band_beam_inds(scan_ind, IF_ind,
-                                                            beam_ind)
-                    Data_sif = db.DataBlock(self.fitsdata.field('DATA')[inds_sif])
-                    # Masked data is stored in FITS files as float('nan')
-                    Data_sif.data[np.logical_not(np.isfinite(
-                                       Data_sif.data))] = ma.masked
-                    # Now iterate over the fields and add them
-                    # to the data block.
-                    for field, axis in fields_and_axes.iteritems() :
-                        # See if this fits file has the key we are looking for.
-                        try:
-                            names = self.fitsdata.names
-                        except AttributeError:
-                            names = self.fitsdata._names
-                        if not field in names :
-                            continue
-                        # First get the 'FITS' format string.
-                        field_format = self.hdulist[1].columns.formats[
-                                    self.hdulist[1].columns.names.index(field)]
-                        if axis :
-                            # From the indices in inds_sif, we only need a
-                            # subset: which_data will subscript inds_sif.
-                            temp_data = self.fitsdata.field(field)[inds_sif]
-                            # For reshaping at the end.
-                            field_shape = []
-                            for ii, single_axis in enumerate(Data_sif.axes[0:-1]) :
-                                # For each axis, slice out all the data except the
-                                # stuff we need.
-                                which_data = [slice(None)] * 3
-                                if single_axis in axis :
-                                    field_shape.append(Data_sif.dims[ii])
-                                else :
-                                    which_data[ii] = [0]
-                                temp_data = temp_data[tuple(which_data)]
-                            temp_data.shape = tuple(field_shape)
-                            Data_sif.set_field(field, temp_data, axis, field_format)
+            for band_ind in bands :
+                # Choose the appropriate records from the file, get that data.
+                records_sb = self.get_scan_band_records(scan_ind, band_ind)
+                block_sb = SpecBlock(records_sb["DATA"])
+                # Masked data is stored in FITS files as float('nan')
+                block_sb.data[np.logical_not(np.isfinite(
+                                   block_sb.data))] = ma.masked
+                # Now iterate over the fields and add them
+                # to the data block.
+                for field, field_axes in SPEC_FIELDS.iteritems() :
+                    if not field in self._field_names :
+                        continue
+                    # First get the 'FITS' format string.
+                    field_format = self.hdulist[1].columns.formats[
+                                self.hdulist[1].columns.names.index(field)]
+                    which_data = [slice(None)] * 2
+                    for ii, single_axis in enumerate(block_sb.axes[:-1]):
+                        # For each axis, slice out all the data except the
+                        # stuff we need.
+                        if single_axis in field_axes :
+                            #field_shape.append(block_sb.shape[ii])
+                            pass
                         else :
-                            Data_sif.set_field(field, self.fitsdata.field(field)
-                                [inds_sif[0,0,0]], axis, field_format)
-                    if hasattr(self, 'history') :
-                        Data_sif.history = db.History(self.history)
-                    else :
-                        self.history =bf.get_history_header(self.hdulist[0].header)
-                        #self.set_history(Data_sif)
-                        fname_abbr = ku.abbreviate_file_path(self.fname)
-                        self.history.add('Read from file.', ('File name: ' + 
-                                             fname_abbr, ))
-                        Data_sif.history = db.History(self.history)
-                    Data_sif.verify()
-                    output = output + (Data_sif, )
-        print 'Read finished.'
-        if len(output) == 1 and not force_tuple :
-            return output[0]
-        else :
-            return output
+                            which_data[ii] = 0
+                    field_data = records_sb[tuple(which_data)][field]
+                    block_sb.set_field(field, field_data, field_axes,
+                                        field_format)
+                if False:
+                    self.history = bf.get_history_header(self.hdulist[0].header)
+                        #self.set_history(Data_sb)
+                    fname_abbr = ku.abbreviate_file_path(self.fname)
+                    self.history.add('Read from file.', ('File name: ' + 
+                                         fname_abbr, ))
+                    Data_sb.history = db.History(self.history)
+                block_sb.verify()
+                blocks.append(block_sb)
+        logger.info("Read finished")
+        return blocks
 
     def __del__(self):
         self.hdulist.close()
@@ -877,7 +843,7 @@ class History(dict) :
                             self[entry] = self[entry] + (detail, )
                     except KeyError :
                         raise HistoryError("Histories to be merged must have"
-                                         " identical keys.")
+                                           " identical keys.")
 
     def write(self, fname) :
         """Write this history to disk."""

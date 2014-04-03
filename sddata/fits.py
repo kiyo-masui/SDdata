@@ -87,8 +87,6 @@ class BaseFitsBlock(object):
     shape
     data
     field
-    field_axes
-    field_formats
     history
 
     Methods
@@ -121,10 +119,25 @@ class BaseFitsBlock(object):
 
     @property
     def field(self):
+        """Any data fields other than the main sky data.
+
+        Returns
+        -------
+        field : :class:`dict`
+            Dictionary of :class:`Field` objects.
+
+        """
         return self._field
 
     @property
     def history(self):
+        """Record of this data's history.
+
+        Returns
+        -------
+        history : :class:`History`
+
+        """
         return self._history
 
     def __init__(self, data, copy=True):
@@ -818,7 +831,7 @@ class History(dict) :
                 print '    ' + detail
 
     def merge(self, *args) :
-        """Merge this multiple :class:`History` objects into this one.
+        """Merge multiple :class:`History` objects into this one.
         
         To be mergable, all :class:`History` objects must have identical
         'entries' (keys) but the 'details' (values) or each entry may differ.

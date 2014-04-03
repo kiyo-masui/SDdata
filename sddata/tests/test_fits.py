@@ -160,6 +160,9 @@ npol_gos = len(pol_set)
 ncal_gos = len(cal_set)
 nchan_gos = npol_gos * ncal_gos
 nfreq_gos = 2048
+# Subset of fields known to be present in test data.
+fields_gos = ['SCAN', 'OBSERVER', 'RESTFREQ', 'CTYPE1', 'CRVAL1', 'DATE-OBS',
+              'CRVAL2', 'CRVAL3', 'CRVAL4', 'CAL', 'EXPOSURE']
 
 
 class TestReaderInit(unittest.TestCase) :
@@ -177,6 +180,7 @@ class TestReaderInit(unittest.TestCase) :
 
     def tearDown(self):
         del self.reader
+
 
 class TestReaderGetIFScanInds(unittest.TestCase) :
     
@@ -304,6 +308,38 @@ class TestMultiRead(unittest.TestCase) :
             the_band = round(block.field['CRVAL1'][0], -4)
             self.assertEqual(scan_list[ii], the_scan)
             self.assertAlmostEqual(band_list[ii], the_band)
+
+
+class TestWriter(unittest.TestCase) :
+    """Unit tests for fits file writer.
+    """
+
+    def setUp(self) :
+        self.writer = fits.SpecWriter()
+        self.reader = fits.SpecReader(testfile_gos)
+        block, = self.reader.read(0, 0)
+        self.writer.add_data(block)
+
+    def test_add_data(self) :
+        for field_name in fields_gos:
+            self.assertEqual(len(self.writer.field[field_name]),
+                             ntime_gos*npol_gos*ncal_gos)
+        block, = self.reader.read(1, 0)
+        self.writer.add_data(block)
+        for field_name in fields_gos:
+            self.assertEqual(len(self.writer.field[field_name]),
+                             2*ntime_gos*npol_gos*ncal_gos)
+
+    def test_error_on_bad_format(self) :
+        block, = self.reader.read(1, 0)
+        block.field['CRVAL1']._fits_format = '1I'
+        self.assertRaises(fits.DataError, self.writer.add_data, block)
+
+    def tearDown(self) :
+        del self.writer
+        del self.reader
+
+
 
 
 

@@ -39,31 +39,31 @@ class TestWriter(unittest.TestCase) :
     """
 
     def setUp(self) :
-        self.Writer = fits.SpecWriter(feedback = 0)
-        self.Reader = fits.SpecReader(testfile_gos, 0)
-        Block = self.Reader.read(0, 0)
-        self.Writer.add_data(Block)
+        self.writer = fits.SpecWriter(feedback = 0)
+        self.reader = fits.SpecReader(testfile_gos, 0)
+        Block = self.reader.read(0, 0)
+        self.writer.add_data(Block)
 
     def test_add_data(self) :
         for field_name in fitsGBT.fields_and_axes.iterkeys() :
             if field_name not in ['RA', 'DEC']:
-                self.assertEqual(len(self.Writer.field[field_name]),
+                self.assertEqual(len(self.writer.field[field_name]),
                                  ntime_gos*npol_gos*ncal_gos)
-        Block = self.Reader.read(1, 0)
-        self.Writer.add_data(Block)
+        Block = self.reader.read(1, 0)
+        self.writer.add_data(Block)
         for field_name in fitsGBT.fields_and_axes.iterkeys() :
             if field_name not in ['RA', 'DEC']:
-                self.assertEqual(len(self.Writer.field[field_name]),
+                self.assertEqual(len(self.writer.field[field_name]),
                                  2*ntime_gos*npol_gos*ncal_gos)
 
     def test_error_on_bad_format(self) :
-        Block = self.Reader.read(1, 0)
+        Block = self.reader.read(1, 0)
         Block.field_formats['CRVAL1'] = '1I'
-        self.assertRaises(ce.DataError, self.Writer.add_data, Block)
+        self.assertRaises(ce.DataError, self.writer.add_data, Block)
 
     def tearDown(self) :
-        del self.Writer
-        del self.Reader
+        del self.writer
+        del self.reader
 
 class TestCircle(unittest.TestCase) :
     """Circle tests for the reader and writer.
@@ -74,8 +74,8 @@ class TestCircle(unittest.TestCase) :
     """
 
     def setUp(self) :
-        self.Reader = fits.SpecReader(testfile_gos, 0)
-        self.Blocks = list(self.Reader.read([], []))
+        self.reader = fits.SpecReader(testfile_gos, 0)
+        self.Blocks = list(self.reader.read([], []))
         # Manually add in RA and DEC fields as test data was created before
         # these were standard.
         for Data in self.Blocks:
@@ -87,8 +87,8 @@ class TestCircle(unittest.TestCase) :
 
     def circle(self) :
         self.BlocksToWrite = copy.deepcopy(self.Blocks)
-        self.Writer = fits.SpecWriter(self.BlocksToWrite, 0)
-        self.Writer.write('temp.fits')
+        self.writer = fits.SpecWriter(self.BlocksToWrite, 0)
+        self.writer.write('temp.fits')
         self.newReader = fits.SpecReader('temp.fits', 0)
         self.newBlocks = self.newReader.read()
 
@@ -128,8 +128,8 @@ class TestCircle(unittest.TestCase) :
                             self.newBlocks[1].data.mask))
 
     def tearDown(self) :
-        del self.Reader
-        del self.Writer
+        del self.reader
+        del self.writer
         del self.newReader
         os.remove('temp.fits')
 
@@ -138,13 +138,13 @@ class TestHistory(unittest.TestCase) :
 
     def setUp(self) :
         # testfile_gos has no history.
-        self.Reader = fits.SpecReader(testfile_gos, 0)
+        self.reader = fits.SpecReader(testfile_gos, 0)
 
     def test_reads_history(self) :
-        self.Reader.hdulist[0].header.update('DB-HIST', 'First History')
-        self.Reader.hdulist[0].header.update('DB-DET', 'A Detail')
-        Block1 = self.Reader.read(0, 0)
-        Block = self.Reader.read(0, 1)
+        self.reader.hdulist[0].header.update('DB-HIST', 'First History')
+        self.reader.hdulist[0].header.update('DB-DET', 'A Detail')
+        Block1 = self.reader.read(0, 0)
+        Block = self.reader.read(0, 1)
         self.assertTrue(Block.history.has_key('000: First History'))
         self.assertEqual(Block.history['000: First History'][0], 'A Detail')
         self.assertTrue(Block.history.has_key('001: Read from file.'))
@@ -153,8 +153,8 @@ class TestHistory(unittest.TestCase) :
 
     def test_writes_history(self) :
         # Mock up a work flow history
-        Block1 = self.Reader.read(0, 0)
-        Block2 = self.Reader.read(0, 1)
+        Block1 = self.reader.read(0, 0)
+        Block2 = self.reader.read(0, 1)
         Block1.add_history('Processed.', ('Processing detail 1',))
         Block2.add_history('Processed.', ('Processing detail 2',))
         hist_entry = ("This is a long history entry that is much longer than "
@@ -191,7 +191,7 @@ class TestHistory(unittest.TestCase) :
 
 
     def tearDown(self) :
-        del self.Reader
+        del self.reader
 
         
                 

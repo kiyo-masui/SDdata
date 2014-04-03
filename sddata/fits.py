@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 CARD_HIST = 'HIST'
-CARD_HIST = 'HISTDET'
+CARD_DET = 'HISTDET'
 
 
 # Containers
@@ -624,12 +624,12 @@ class SpecReader(object):
                     block_sb.set_field(field, field_data, field_axes,
                                         field_format)
                 if False:
-                    self.history = bf.get_history_header(self.hdulist[0].header)
+                    self.history = get_history_header(self.hdulist[0].header)
                         #self.set_history(Data_sb)
                     fname_abbr = ku.abbreviate_file_path(self.fname)
                     self.history.add('Read from file.', ('File name: ' + 
                                          fname_abbr, ))
-                    Data_sb.history = db.History(self.history)
+                    Data_sb.history = History(self.history)
                 block_sb.verify()
                 blocks.append(block_sb)
         logger.info("Read finished")
@@ -639,7 +639,7 @@ class SpecReader(object):
         self.hdulist.close()
 
 
-class Writer():
+class SpecWriter():
     """Class that writes data back to fits files.
 
     This class acculumates data stored in DataBlock objects using the
@@ -647,15 +647,15 @@ class Writer():
     she can then call the 'write(file_name)' method to write it to file.
     """
     
-    def __init__(self, Blocks=None):
+    def __init__(self, blocks=None):
         
         self.first_block_added = True
         self.field = {}
         self.formats = {}
-        if not Blocks is None:
-            self.add_data(Blocks)
+        if not blocks is None:
+            self.add_data(blocks)
 
-    def add_data(self, Blocks) :
+    def add_data(self, blocks) :
         """Interface for adding DataBlock objects to the Writter.
         
         This method can be passed either a single DataBlock object or any
@@ -663,65 +663,65 @@ class Writer():
         data which can eventually be written as a fits file.
         """
 
-        if not hasattr(Blocks, '__iter__'):
-            self._add_single_block(Blocks)
+        if not hasattr(blocks, '__iter__'):
+            self._add_single_block(blocks)
         else :
-            for Block in Blocks:
-                self._add_single_block(Block)
+            for block in blocks:
+                self._add_single_block(block)
 
-    def _add_single_block(self, Block):
+    def _add_single_block(self, block):
         """Adds all the data in a DataBlock Object to the Writer such that it
         can be written to a fits file eventually."""
         
-        Block.verify()
+        block.verify()
         # Merge the histories
         if self.first_block_added :
-            self.history = db.History(Block.history)
+            self.history = History(block.history)
         else :
-            self.history = db.merge_histories(self.history, Block)
+            self.history = merge_histories(self.history, block)
         # Some dimensioning and such
-        dims = tuple(Block.dims)
-        n_records = dims[0]*dims[1]*dims[2]
-        block_shape = dims[0:-1]
+        shape = tuple(block.shape)
+        n_records = shape[0] * shape[1]
+        block_shape = shape[0:-1]
         # For now automatically determine the format for the data field.
-        data_format = str(dims[-1]) + 'E'
+        data_format = str(shape[-1]) + 'D'
         if self.first_block_added :
             self.data_format = data_format
         elif self.data_format != data_format :
-            raise ce.DataError('Data shape miss match: freq axis must be same'
-                               ' length for all DataBlocks added to Wirter.')
+            raise DataError('Data shape miss match: freq axis must be same'
+                            ' length for all blocks added to writer.')
 
-        # Copy the reshaped data from the DataBlock
-        data = Block.data.filled(np.nan)
+        # Copy the reshaped data
+        data = block.data.filled(np.nan)
         if self.first_block_added :
-            self.data = data.reshape((n_records, dims[3]))
+            self.data = data.reshape((n_records, shape[2])).copy()
         else :
             self.data = np.concatenate((self.data, data.reshape((
-                                        n_records, dims[3]))), axis=0)
+                                        n_records, shape[2]))), axis=0)
 
         # Now get all stored fields for writing out.
-        for field, axes in Block.field_axes.iteritems() :
+        for field_name, field in block.field.iteritems():
+            axes = field.axes
             # Need to expand the field data to the full ntime x npol x ncal
-            # length (with lots of repitition).  We will use np broadcasting.
-            broadcast_shape = [1,1,1]
+            # length (with lots of repetition).  We will use np broadcasting.
+            broadcast_shape = [1,1]
             for axis in axes :
-                axis_ind = list(Block.axes).index(axis)
-                broadcast_shape[axis_ind] = dims[axis_ind]
-            # Allowcate memory for the new full field.
-            data_type = Block.field[field].dtype
+                axis_ind = list(block.axes).index(axis)
+                broadcast_shape[axis_ind] = shape[axis_ind]
+            # Allocate memory for the new full field.
+            data_type = field.dtype
             field_data = np.empty(block_shape, dtype=data_type)
             # Copy data with the entries, expanding dummy axes.
-            field_data[:,:,:] = np.reshape(Block.field[field],
-                                                 broadcast_shape)
+            field_data[:,:] = np.reshape(field, broadcast_shape)
             if self.first_block_added :
-                self.field[field] = field_data.reshape(n_records)
-                self.formats[field] = Block.field_formats[field]
+                self.field[field_name] = field_data.reshape(n_records)
+                self.formats[field_name] = field.format
             else :
-                self.field[field] = np.concatenate((self.field[field],
+                self.field[field_name] = np.concatenate((self.field[field_name],
                                         field_data.reshape(n_records)), axis=0)
-                if self.formats[field] != Block.field_formats[field] :
-                    raise ce.DataError('Format miss match in added data blocks'
-                                       ' and field: ' + field)
+                if self.formats[field_name] != field.format :
+                    raise DataError('Format miss match in added data blocks'
+                                       ' and field: %s' % field_name)
         self.first_block_added = False
 
     def write(self, file_name):
@@ -743,7 +743,7 @@ class Writer():
                                 array=self.field[field_name])
             columns.append(Col)
         coldefs = pyfits.ColDefs(columns)
-        # Creat fits header data units, one for the table and the mandatory
+        # Create fits header data units, one for the table and the mandatory
         # primary.
         tbhdu = pyfits.new_table(coldefs)
         prihdu = pyfits.PrimaryHDU()
@@ -751,12 +751,12 @@ class Writer():
         fname_abbr = ku.abbreviate_file_path(file_name)
         self.history.add('Written to file.', ('File name: ' + fname_abbr,))
         # Add the history to the header.
-        bf.write_history_header(prihdu.header, self.history)
+        write_history_header(prihdu.header, self.history)
 
         # Combine the HDUs and write to file.
         hdulist = pyfits.HDUList([prihdu, tbhdu])
         hdulist.writeto(file_name, clobber=True)
-        print 'Wrote data to file: ' + fname_abbr
+        logger.info('Wrote data to file: %s' % fname_abbr)
 
 
 # Exceptions
@@ -906,5 +906,69 @@ def merge_histories(*args) :
     history.merge(*args[1:])
         
     return history
+
+
+def get_history_header(prihdr) :
+    """Gets the history from a pyfits primary header.
+    
+    This function accepts the primary header of a pyfits hdulist and reads
+    the data 'history' from it.  This is the history that is tracked by this
+    code, with cards DB-HIST and DB-DET (not the normal fits HISTORY cards).
+    """
+    
+    # Initialize a blank history object
+    history = bd.History()
+    # Get the cardlist.
+    try:
+        # New versions of pyfits.
+        ascard = prihdr.ascard
+    except AttributeError:
+        # Earlier versions of pyfits.
+        ascard = prihdr.ascardlist()
+    # If there is no history, return.
+    try :
+        ii = ascard.index_of(CARD_HIST)
+    except KeyError :
+        return history
+    n_cards = len(ascard.keys())
+    while ii < n_cards :
+        if ascard.keys()[ii] == CARD_HIST :
+            hist_entry = prihdr[ii]
+            details = []
+        elif ascard.keys()[ii] == CARD_DET :
+            details.append(prihdr[ii])
+        ii = ii + 1
+        if ii == n_cards or ascard.keys()[ii] == CARD_HIST :
+            history.add(hist_entry, details)
+
+    return history
+
+
+def write_history_header(prihdr, history) :
+    """Puts a puts a data history into a pyfits header.
+
+    history is a bd.History object, that is stored at the end of the pyfits
+    header using the DB-HIST and DB-DET cards.
+    """
+
+    # Get the cardlist.
+    try:
+        # New versions of pyfits.
+        ascard = prihdr.ascard
+    except AttributeError:
+        # Earlier versions of pyfits.
+        ascard = prihdr.ascardlist()
+    history_keys  = history.keys()
+    history_keys.sort()
+    for hist in history_keys :
+        details = history[hist]
+        # Chop off the number, since they are already sorted.
+        hcard = pyfits.Card(CARD_HIST, hist[5:])
+        ascard.append(hcard)
+        for detail in details :
+            dcard = pyfits.Card(CARD_DET, detail)
+            ascard.append(dcard)
+
+
 
 

@@ -12,6 +12,7 @@ Modules
     :toctree: generated/
 
     fits
+    parse_ini
     file_utils
 
 

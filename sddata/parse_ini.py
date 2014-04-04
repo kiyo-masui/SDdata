@@ -1,23 +1,29 @@
-"""This parser is my system for reading input files for large programs.  The idea
-is that the only argument for the program should always be the input file and
-all the parameters are read from that file.  The input file will have plain
-python syntax.  I've found this to have the best flexibility, avoiding the
-need to have many versions of the same code.  However, because any python
-statements are executed when the input file is read, this system is not
-appropriate if security is an issue (it's an arbitrary code exceution security
-hole).
-
-This is purposely written as a set of functions rather than a class.  I can
-think of no reason that you would want the parser to stick around after being
-called and the output dictionaries are pretty self contained.
-
-Revision History:
-  KM August '10 - Wrote initial code (fileparser and dictparser).
-                - Later converted fileparser to just parse, which is an
-                  interface for both files and dicts.
-  KM Oct. '10   - Added write_params
-  KM Mar. '11   - Changed checking argument to feedback and type_check.
 """
+Python parameter file parser.
+
+Framework for writing and parsing input files for large programs.  The input
+file will have plain python syntax.
+
+Functions
+=========
+
+.. autosummary::
+   :toctree: generated/
+
+    parse
+    write_params
+
+Exceptions
+==========
+
+.. autosummary::
+   :toctree: generated/
+
+    ParameterTypeError
+    ParameterFileError
+
+"""
+
 
 import logging
 
@@ -28,54 +34,56 @@ def parse(ini_data, params, return_undeclared=False, prefix='',
           type_check=False):
     """Parses a python file or dictionary to get parameters.
     
-    This function accepts a filename and a dictionary of keys and pre typed
+    This function accepts a filename and a dictionary of keys and pre-typed
     values. It returns a dictionary of the same keys with values read from
     file.  It optionally performs type checking.
 
     Parameters
     ----------
-        ini_data: a string, containing a python file name, or a dictionary.  The
-            file must contain a script (not function) that defines parameter
-            values in the local namespace.  Alternately, if ini is a
-            dictionary, then parameters are read from the dictionary.
-            Variables must have names and
-            types corresponding to the params dictionary argument.
-        params: a dictionary of keys and corresponding to variable names to be
-            read from file and values corresponding to defaults if the
-            corresponding variable is not found in the file.
-        return_undeclared: Bool default False.  Whether to return a second
-            dictionary of with variables found in the parameter file but not in
-            the in params argument.
-        prefix: String default ''.  A prefix added to parameter names (defined
-            in the keys of params) when read from the input file or dictionary.
-            The prefix is not added to the returned output dictionary.
-        type_check: Boolian default False. Whethar to raise an exception if the
-            recived value for a parameter is a different type than the default
-            value.
+    ini_data : string filename or dictionary
+        The file must contain a script that defines parameter values in the
+        local namespace.  Alternately, if a dictionary, then parameters are
+        read from the dictionary.  Variables must have names and types
+        corresponding to the params dictionary argument.
+    params : dict
+        Keys and correspond to variable names to be read and values correspond
+        to defaults if the corresponding variable is not found in the file.
+    return_undeclared : bool
+        Whether to return a second dictionary of with variables found in the
+        parameter file but not in the in params argument.
+    prefix : string
+        A prefix added to parameter names (defined in the keys of params) when
+        read from the input file or dictionary.  The prefix is not added to the
+        returned output dictionary.
+    type_check : bool
+        Whethar to raise an exception if the recived value for a parameter is a
+        different type than the default value.
 
     Returns
     -------
-        out_params: A dictionary with the same keys as argument params but 
-            with values read from file.
-        undeclared: Optional. A dictionary that holds any key found in the 
-            file but not in params. Returned if return_undeclared=True.
+    out_params : dict
+        Keys are the same as *params* but with values read from file.
+    undeclared: dict, optional
+        A dictionary that holds any key found in the file but
+        not in params. Returned if *return_undeclared* is true.
+
     """
     
-    if isinstance(ini_data, str) :
+    if isinstance(ini_data, str):
         logger.info('Reading parameters from file: '+ ini_data)
         # Convert local variables defined in python script to dictionary.
         # This is in a separate function to avoid namespace issues.
         dict_to_parse = _execute_parameter_file(ini_data)
-    elif isinstance(ini_data, dict) :
+    elif isinstance(ini_data, dict):
         logger.info('Reading parameters from dictionary.')
         dict_to_parse = ini_data
     elif ini_data is None :
         logger.info('No input, all parameters defaulted.')
-        if return_undeclared :
+        if return_undeclared:
             return dict(params), {}
-        else :
+        else:
             return dict(params)
-    else :
+    else:
         raise TypeError("Argument ini must be a dictionary, file name, "
                         "or None (to accept defaults).")
     
@@ -97,12 +105,14 @@ def parse_dict(dict_to_parse, params, return_undeclared=False, prefix='',
     information, the only difference is the first argument must be a
     dictionary.
 
-    Arguments:
-        dict_to_parse: A dictionary containing keys and values to be read as
-            parameters.  Entries should have keys and
-            types corresponding to the pars dictionary argument (depending on
-            level of checking requested).
-      """
+    Parameters
+    ----------
+    dict_to_parse : dict
+        A dictionary containing keys and values to be read as parameters.
+        Entries should have keys and types corresponding to the pars dictionary
+        argument (depending on level of checking requested).
+
+    """
     
     # Same keys as params but for checking but contains only a flag to indicate
     # if parameter retained it's default value.
@@ -110,7 +120,7 @@ def parse_dict(dict_to_parse, params, return_undeclared=False, prefix='',
     for key in params.iterkeys():
         defaulted_params[key] = True
     # Make dictionaries for outputs
-    undeclared = {} # For keys found in dict_to_parse and not in params
+    undeclared = {}   # For keys found in dict_to_parse and not in params
     out_params = dict(params)
 
     # Loop over both input dictionaries and look for matching keys
@@ -190,26 +200,29 @@ def write_params(params, file_name, prefix='', mode='w') :
     other types. Basically if the out put of 'print param' looks like it could
     go on the rhs of the assignment operator, you are in good shape.
 
-    arguments:
-        params : dictionary of parameter names and values to be written to
-            file.
-        file_name: sting. File_name to write to.
-        prefix : prefix for teh parameter names when written to file.
-        mode: 'a' or 'w'.  Whether to open the file in write or append mode.
+    Parameters
+    ----------
+    params : dict
+        Parameter names and values to be written to file.
+    file_name: sting
+        File to write to.
+    prefix : string
+        prefix for the parameter names when written to file.
+    mode: stirng
+        Valid values are 'a' or 'w'.  Whether to open the file in write or
+        append mode.
+
     """
     
-    if not (mode == 'w' or mode == 'a') :
+    if not (mode == 'w' or mode == 'a'):
         raise ValueError("Params can be written with mode either 'w' or 'a'.")
     file = open(file_name, mode)
-    for par_name, value in params.iteritems() :
+    for par_name, value in params.iteritems():
         line_str = prefix + par_name + ' = '
         try :
             line_str = line_str + repr(value)
-        except SyntaxError :
-            try :
-                line_str = line_str + repr(value)
-            except SyntaxError :
-                line_str = line_str + "'not representable'"
+        except SyntaxError:
+            line_str = line_str + repr(value)
         line_str = line_str + '\n'
         file.write(line_str)
     file.close()

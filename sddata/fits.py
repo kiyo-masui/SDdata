@@ -640,11 +640,22 @@ class SpecReader(object):
 
 
 class SpecWriter():
-    """Class that writes data back to fits files.
+    """Accumulates spectral data into a table and writes to FITS file.
 
-    This class accumulates data stored in DataBlock objects using the
-    'add_data(DataBlock)' method.  Once the user has added all the data, 
-    she can then call the 'write(file_name)' method to write it to file.
+    This class accumulates data stored in :class:`SpecBlock` objects into a
+    single table, duplicating data across records as required to flatten 'time'
+    and 'chan' axes.  The data can then be written to a FITS file.
+    
+    Parameters
+    ----------
+    blocks : :class:`SpecBlock` or sequence there-of
+        Data to initially add for writing.
+
+    Methods
+    -------
+    add_data
+    write
+
     """
     
     def __init__(self, blocks=None):
@@ -656,13 +667,15 @@ class SpecWriter():
             self.add_data(blocks)
 
     def add_data(self, blocks) :
-        """Interface for adding DataBlock objects to the Writter.
+        """Add data for writing.
         
-        This method can be passed either a single DataBlock object or any
-        sequence of DataBlock objects.  They will all be added to the Writer's
-        data which can eventually be written as a fits file.
-        """
+        Parameters
+        ----------
+        blocks : :class:`SpecBlock` or sequence there-of
+            Data to add for writing.
 
+        """
+        
         if not hasattr(blocks, '__iter__'):
             self._add_single_block(blocks)
         else :
@@ -727,8 +740,11 @@ class SpecWriter():
     def write(self, file_name):
         """Write stored data to file.
         
-        Take all the data stored in the Writer (from added DataBlocks) and
-        write it to a fits file with the passed file name.
+        Parameters
+        ----------
+        file_name : string
+            File name to write data to.
+
         """
 
         # Add the data

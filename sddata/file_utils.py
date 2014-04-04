@@ -1,14 +1,26 @@
-"""A few utilities that I have found the need for.
+"""
+Short utilities for files and file paths.
 
-Most of these are only a few lines long, but this way I don't have to remember
-how to do the same thing over and over.
+Most of these are only a few lines long, but are quite useful.
+
+Functions
+=========
+
+.. autosummary::
+   :toctree: generated/
+
+    mkdir_p
+    mkparents
+    abbreviate_file_path
+
+
 """
 
 import os 
 import errno
 
 def mkdir_p(path) :
-    """Same functionality as shell command mkdir -p."""
+    """Same functionality as shell command shell command mkdir -p."""
     try:
         os.makedirs(path)
     except OSError, exc: # Python >2.5
@@ -25,11 +37,11 @@ def mkparents(path) :
         mkdir_p(outdir)
 
 def abbreviate_file_path(fname) :
-    """Abbrviates file paths.
+    """Abbreviates file paths.
     
-    Givin any file path return an abbreviated path showing only the deepest
-    most directory and the file name (Usefull for writing feedback that doesn't
-    flood your screen.
+    Given any file path return an abbreviated path showing only the deepest
+    most directory and the file name (Useful for writing feedback that doesn't
+    flood your screen).
     """
     
     split_fname = fname.split('/')

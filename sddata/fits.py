@@ -316,11 +316,9 @@ class SpecBlock(BaseFitsBlock) :
     frequency (where channel is a catch all for things like polarization and
     noise-cal gate).
 
-    GBT Old Spectrometer FITS
-    -------------------------
-    Each scan and intermediate frequency (IF) is put into its own separate
-    block.  The 'chan' axis is generally length 8 for the 4 polarizations and 2
-    noise-cal states.
+    GBT Old Spectrometer FITS: Each scan and intermediate frequency (IF) is put
+    into its own separate block.  The 'chan' axis is generally length 8 for the
+    4 polarizations and 2 noise-cal states.
 
     Attributes
     ----------

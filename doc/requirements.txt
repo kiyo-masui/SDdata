@@ -1,6 +1,8 @@
 Sphinx==1.2.2
 numpydoc==0.4
 sphinx-rtd-theme==0.1.5
-numpy==1.8.0
+Cython
+numpy
+scipy
 pyfits==3.1.2
-h5py==2.2.1
+h5py

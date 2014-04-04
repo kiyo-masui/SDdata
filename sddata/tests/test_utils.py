@@ -3,7 +3,7 @@
 import unittest
 import os
 
-import utils
+import sddata.file_utils as utils
 
 
 class TestMKDIR(unittest.TestCase) :

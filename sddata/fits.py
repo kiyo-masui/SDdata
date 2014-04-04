@@ -626,7 +626,7 @@ class SpecReader(object):
                 if False:
                     self.history = get_history_header(self.hdulist[0].header)
                         #self.set_history(Data_sb)
-                    fname_abbr = ku.abbreviate_file_path(self.fname)
+                    fname_abbr = abbreviate_file_path(self.fname)
                     self.history.add('Read from file.', ('File name: ' + 
                                          fname_abbr, ))
                     Data_sb.history = History(self.history)
@@ -740,7 +740,7 @@ class SpecWriter():
         for field_name in self.field.iterkeys() :
             Col = pyfits.Column(name=field_name,
                                 format=self.formats[field_name],
-                                array=self.field[field_name])
+                                array=np.asarray(self.field[field_name]))
             columns.append(Col)
         coldefs = pyfits.ColDefs(columns)
         # Create fits header data units, one for the table and the mandatory
@@ -748,7 +748,7 @@ class SpecWriter():
         tbhdu = pyfits.new_table(coldefs)
         prihdu = pyfits.PrimaryHDU()
         # Add the write history.
-        fname_abbr = ku.abbreviate_file_path(file_name)
+        fname_abbr = abbreviate_file_path(file_name)
         self.history.add('Written to file.', ('File name: ' + fname_abbr,))
         # Add the history to the header.
         write_history_header(prihdu.header, self.history)

@@ -1,6 +1,7 @@
 """Unit tests for :mod:`fits` module."""
 
 import unittest
+import os
 from os import path
 
 import numpy as np
@@ -340,6 +341,65 @@ class TestWriter(unittest.TestCase) :
         del self.reader
 
 
+class TestCircle(unittest.TestCase) :
+    """Circle tests for the reader and writer.
+
+    I'm sure there is a word for it, but I've dubbed a circle test when you
+    read some data, do something to it, then write it and read it again.  Then
+    check it element by element that it hasn't changed.
+    """
+
+    def setUp(self) :
+        self.reader = fits.SpecReader(testfile_gos)
+        self.blocks = list(self.reader.read([], []))
+
+    def circle(self) :
+        self.blocksToWrite = self.blocks
+        self.writer = fits.SpecWriter(self.blocksToWrite)
+        self.writer.write('temp_test.fits')
+        self.newReader = fits.SpecReader('temp_test.fits')
+        self.newblocks = self.newReader.read()
+
+        self.assertEqual(len(self.blocks), len(self.newblocks))
+        for ii in range(len(self.newblocks)) :
+            OldDB = self.blocks[ii]
+            NewDB = self.newblocks[ii]
+            self.assertEqual(OldDB.shape, NewDB.shape)
+            self.assertTrue(ma.allclose(OldDB.data, NewDB.data))
+            for field in fields_gos:
+                self.assertEqual(OldDB.field[field].axes,
+                                 NewDB.field[field].axes)
+            for field in ['SCAN', 'CRPIX1', 'CDELT1'] :
+                self.assertEqual(OldDB.field[field], NewDB.field[field])
+            for field in ['OBJECT', 'TIMESTAMP', 'OBSERVER',]:
+                self.assertEqual(str(OldDB.field[field]).strip(),
+                                 str(NewDB.field[field]).strip())
+            for field in ['BANDWID', 'RESTFREQ', 'DURATION'] :
+                self.assertAlmostEqual(OldDB.field[field], NewDB.field[field])
+            for field in ['CRVAL1', 'LST', 'ELEVATIO', 'AZIMUTH',
+                          'CRVAL2', 'CRVAL3', 'EXPOSURE'] :
+                self.assertTrue(np.allclose(OldDB.field[field], 
+                                            NewDB.field[field]))
+            for field in ['DATE-OBS'] :
+                self.assertTrue(np.alltrue(np.equal(OldDB.field[field], 
+                                            NewDB.field[field])))
+            for field in ['CRVAL4', 'CAL'] :
+                self.assertTrue(all(OldDB.field[field] == NewDB.field[field]))
+
+    def test_basic(self) :
+        self.circle()
+
+    def test_masking(self) :
+        self.blocks[1].data[3,2,30] = ma.masked
+        self.circle()
+        self.assertTrue(np.all(self.blocks[1].data.mask == 
+                            self.newblocks[1].data.mask))
+
+    def tearDown(self) :
+        del self.reader
+        del self.writer
+        del self.newReader
+        os.remove('temp_test.fits')
 
 
 

@@ -10,7 +10,7 @@ import numpy.ma as ma
 import sddata.fits as fits
 
 
-data_path = path.dirname(path.realpath( __file__ )) + '/data/'
+data_path = path.join(path.dirname(path.realpath( __file__ )), 'data')
 
 
 # Tests for data container

@@ -365,7 +365,8 @@ class TestCircle(unittest.TestCase) :
             OldDB = self.blocks[ii]
             NewDB = self.newblocks[ii]
             self.assertEqual(OldDB.shape, NewDB.shape)
-            self.assertTrue(ma.allclose(OldDB.data, NewDB.data))
+            self.assertTrue(ma.allclose(OldDB.data.filled(0),
+                                        NewDB.data.filled(0)))
             for field in fields_gos:
                 self.assertEqual(OldDB.field[field].axes,
                                  NewDB.field[field].axes)
@@ -400,6 +401,68 @@ class TestCircle(unittest.TestCase) :
         del self.writer
         del self.newReader
         os.remove('temp_test.fits')
+
+
+class TestHistory(unittest.TestCase) :
+    """Tests that histories are read, added and written."""
+
+    def setUp(self) :
+        # testfile_gos has no history.
+        self.reader = fits.SpecReader(testfile_gos)
+
+    def test_reads_history(self) :
+        self.reader.hdulist[0].header.update(fits.CARD_HIST, 'First History')
+        self.reader.hdulist[0].header.update(fits.CARD_DET, 'A Detail')
+        Block1, = self.reader.read(0, 0)
+        Block, = self.reader.read(0, 1)
+        self.assertTrue(Block.history.has_key('000: First History'))
+        self.assertEqual(Block.history['000: First History'][0], 'A Detail')
+        self.assertTrue(Block.history.has_key('001: Read from file.'))
+        self.assertEqual(Block.history['001: Read from file.'][0], 
+                        'File name: ' + fits.abbreviate_file_path(testfile_gos))
+
+    def test_writes_history(self) :
+        # Mock up a work flow history
+        Block1, = self.reader.read(0, 0)
+        Block2, = self.reader.read(0, 1)
+        Block1.add_history('Processed.', ('Processing detail 1',))
+        Block2.add_history('Processed.', ('Processing detail 2',))
+        hist_entry = ("This is a long history entry that is much longer than "
+                      "80 characters and should cause a wrapping of the fits "
+                      "history key.")
+        hist_detail = ("We really want to check that the pyfits "
+                       "mechanisms/any supporting code that Ive written can "
+                       "properly deal with this.",)
+        Block1.add_history(hist_entry, hist_detail)
+        Block2.add_history(hist_entry, hist_detail)
+        Writer = fits.SpecWriter((Block1, Block2))
+        Writer.write('temp2.fits')
+        newReader = fits.SpecReader('temp2.fits')
+        newBlock, = newReader.read(0,0)
+        # These two line need to come before anything likly to fail.
+        del newReader
+        os.remove('temp2.fits')
+        # See that we have all the history we expect.
+        hist = newBlock.history
+        self.assertTrue(hist.has_key('000: Read from file.'))
+        self.assertEqual(len(hist['000: Read from file.']), 1)
+        self.assertTrue(hist.has_key('001: Processed.'))
+        self.assertEqual(len(hist['001: Processed.']), 2)
+        self.assertEqual(hist['001: Processed.'][0], 'Processing detail 1')
+        self.assertEqual(hist['001: Processed.'][1], 'Processing detail 2')
+        self.assertTrue(hist.has_key('002: ' + hist_entry))
+        self.assertEqual(len(hist['002: ' + hist_entry]), 1)
+        self.assertEqual(hist['002: ' + hist_entry][0], hist_detail[0])
+        self.assertTrue(hist.has_key('003: Written to file.'))
+        self.assertEqual(len(hist['003: Written to file.']), 1)
+        self.assertEqual(hist['003: Written to file.'][0], 'File name: ' + 
+                         'temp2.fits')
+        self.assertTrue(hist.has_key('004: Read from file.'))
+
+
+    def tearDown(self) :
+        del self.reader
+
 
 
 

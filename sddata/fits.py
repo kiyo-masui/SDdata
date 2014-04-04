@@ -51,8 +51,8 @@ from sddata.file_utils import abbreviate_file_path
 logger = logging.getLogger(__name__)
 
 
-CARD_HIST = 'HIST'
-CARD_DET = 'HISTDET'
+CARD_HIST = 'SDHIST'
+CARD_DET = 'SDHISDET'
 
 
 # Containers
@@ -623,13 +623,13 @@ class SpecReader(object):
                     field_data = records_sb[tuple(which_data)][field]
                     block_sb.set_field(field, field_data, field_axes,
                                         field_format)
-                if False:
+                if not hasattr(self, 'history'):
                     self.history = get_history_header(self.hdulist[0].header)
                         #self.set_history(Data_sb)
                     fname_abbr = abbreviate_file_path(self.fname)
                     self.history.add('Read from file.', ('File name: ' + 
                                          fname_abbr, ))
-                    Data_sb.history = History(self.history)
+                block_sb._history = History(self.history)
                 block_sb.verify()
                 blocks.append(block_sb)
         logger.info("Read finished")
@@ -642,7 +642,7 @@ class SpecReader(object):
 class SpecWriter():
     """Class that writes data back to fits files.
 
-    This class acculumates data stored in DataBlock objects using the
+    This class accumulates data stored in DataBlock objects using the
     'add_data(DataBlock)' method.  Once the user has added all the data, 
     she can then call the 'write(file_name)' method to write it to file.
     """
@@ -917,7 +917,7 @@ def get_history_header(prihdr) :
     """
     
     # Initialize a blank history object
-    history = bd.History()
+    history = History()
     # Get the cardlist.
     try:
         # New versions of pyfits.

@@ -33,118 +33,18 @@ nfreq_gos = 2048
 
 
 
-
-class TestWriter(unittest.TestCase) :
-    """Unit tests for fits file writer.
-    """
-
-    def setUp(self) :
-        self.Writer = fits.SpecWriter(feedback = 0)
-        self.Reader = fits.SpecReader(testfile_gos, 0)
-        Block = self.Reader.read(0, 0)
-        self.Writer.add_data(Block)
-
-    def test_add_data(self) :
-        for field_name in fitsGBT.fields_and_axes.iterkeys() :
-            if field_name not in ['RA', 'DEC']:
-                self.assertEqual(len(self.Writer.field[field_name]),
-                                 ntime_gos*npol_gos*ncal_gos)
-        Block = self.Reader.read(1, 0)
-        self.Writer.add_data(Block)
-        for field_name in fitsGBT.fields_and_axes.iterkeys() :
-            if field_name not in ['RA', 'DEC']:
-                self.assertEqual(len(self.Writer.field[field_name]),
-                                 2*ntime_gos*npol_gos*ncal_gos)
-
-    def test_error_on_bad_format(self) :
-        Block = self.Reader.read(1, 0)
-        Block.field_formats['CRVAL1'] = '1I'
-        self.assertRaises(ce.DataError, self.Writer.add_data, Block)
-
-    def tearDown(self) :
-        del self.Writer
-        del self.Reader
-
-class TestCircle(unittest.TestCase) :
-    """Circle tests for the reader and writer.
-
-    I'm sure there is a word for it, but I've dubbed a circle test when you
-    read some data, do something to it, then write it and read it again.  Then
-    check it element by element that it hasn't changed.
-    """
-
-    def setUp(self) :
-        self.Reader = fits.SpecReader(testfile_gos, 0)
-        self.Blocks = list(self.Reader.read([], []))
-        # Manually add in RA and DEC fields as test data was created before
-        # these were standard.
-        for Data in self.Blocks:
-            ntime = Data.dims[0]
-            Data.set_field('RA', sp.arange(ntime, dtype=sp.float64),
-                    axis_names=('time',))
-            Data.set_field('DEC', sp.arange(ntime, 0, -1, dtype=sp.float64),
-                    axis_names=('time',))
-
-    def circle(self) :
-        self.BlocksToWrite = copy.deepcopy(self.Blocks)
-        self.Writer = fits.SpecWriter(self.BlocksToWrite, 0)
-        self.Writer.write('temp.fits')
-        self.newReader = fits.SpecReader('temp.fits', 0)
-        self.newBlocks = self.newReader.read()
-
-        self.assertEqual(len(self.Blocks), len(self.newBlocks))
-        for ii in range(len(self.newBlocks)) :
-            OldDB = self.Blocks[ii]
-            NewDB = self.newBlocks[ii]
-            for jj in range(4) :
-                self.assertEqual(OldDB.dims[ii], NewDB.dims[ii])
-            self.assertTrue(ma.allclose(OldDB.data, NewDB.data))
-            for field, axis in fitsGBT.fields_and_axes.iteritems() :
-                if field in OldDB.field.keys():
-                    self.assertEqual(axis, OldDB.field_axes[field])
-                    self.assertEqual(axis, NewDB.field_axes[field])
-            for field in ['SCAN', 'OBJECT', 'TIMESTAMP',
-                          'OBSERVER', 'CRPIX1', 'CDELT1'] :
-                self.assertEqual(OldDB.field[field], NewDB.field[field])
-            for field in ['CRVAL1', 'BANDWID', 'RESTFREQ', 'DURATION'] :
-                self.assertAlmostEqual(OldDB.field[field], NewDB.field[field])
-            for field in ['LST', 'ELEVATIO', 'AZIMUTH', 'RA', 'DEC',
-                          'OBSFREQ', 'CRVAL2', 'CRVAL3', 'EXPOSURE'] :
-                self.assertTrue(sp.allclose(OldDB.field[field], 
-                                            NewDB.field[field]))
-            for field in ['DATE-OBS'] :
-                self.assertTrue(sp.alltrue(sp.equal(OldDB.field[field], 
-                                            NewDB.field[field])))
-            for field in ['CRVAL4', 'CAL'] :
-                self.assertTrue(all(OldDB.field[field] == NewDB.field[field]))
-
-    def test_basic(self) :
-        self.circle()
-
-    def test_masking(self) :
-        self.Blocks[1].data[3,2,1,30] = ma.masked
-        self.circle()
-        self.assertTrue(sp.all(self.Blocks[1].data.mask == 
-                            self.newBlocks[1].data.mask))
-
-    def tearDown(self) :
-        del self.Reader
-        del self.Writer
-        del self.newReader
-        os.remove('temp.fits')
-
 class TestHistory(unittest.TestCase) :
     """Tests that histories are read, added and written."""
 
     def setUp(self) :
         # testfile_gos has no history.
-        self.Reader = fits.SpecReader(testfile_gos, 0)
+        self.reader = fits.SpecReader(testfile_gos, 0)
 
     def test_reads_history(self) :
-        self.Reader.hdulist[0].header.update('DB-HIST', 'First History')
-        self.Reader.hdulist[0].header.update('DB-DET', 'A Detail')
-        Block1 = self.Reader.read(0, 0)
-        Block = self.Reader.read(0, 1)
+        self.reader.hdulist[0].header.update('DB-HIST', 'First History')
+        self.reader.hdulist[0].header.update('DB-DET', 'A Detail')
+        Block1 = self.reader.read(0, 0)
+        Block = self.reader.read(0, 1)
         self.assertTrue(Block.history.has_key('000: First History'))
         self.assertEqual(Block.history['000: First History'][0], 'A Detail')
         self.assertTrue(Block.history.has_key('001: Read from file.'))
@@ -153,8 +53,8 @@ class TestHistory(unittest.TestCase) :
 
     def test_writes_history(self) :
         # Mock up a work flow history
-        Block1 = self.Reader.read(0, 0)
-        Block2 = self.Reader.read(0, 1)
+        Block1 = self.reader.read(0, 0)
+        Block2 = self.reader.read(0, 1)
         Block1.add_history('Processed.', ('Processing detail 1',))
         Block2.add_history('Processed.', ('Processing detail 2',))
         hist_entry = ("This is a long history entry that is much longer than "
@@ -191,7 +91,7 @@ class TestHistory(unittest.TestCase) :
 
 
     def tearDown(self) :
-        del self.Reader
+        del self.reader
 
         
                 

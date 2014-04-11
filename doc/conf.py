@@ -27,7 +27,7 @@ import sys, os
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 # 'numpydoc' does not ship with sphinx. To get it use `pip install numpydoc`.
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.pngmath', 'sphinx.ext.mathjax',
-              'numpydoc', 'sphinx.ext.autosummary']
+              'numpydoc', 'sphinx.ext.autosummary', 'sphinx.ext.viewcode']
 
 numpydoc_show_class_members = False
 import glob

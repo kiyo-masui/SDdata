@@ -311,7 +311,7 @@ class SpecBlock(BaseFitsBlock) :
     """Represents data from spectrometer type instruments.
 
     Inherits from :class:`BaseFitsBlock`.
-    
+
     This type of data has axes representing time, channel, and spectral
     frequency (where channel is a catch all for things like polarization and
     noise-cal gate).
@@ -325,7 +325,7 @@ class SpecBlock(BaseFitsBlock) :
     axes
 
     """
-    
+
     # These are the valid axes that a data field can vary over.  Any other
     # field can vary over only the first three of these.
     @property

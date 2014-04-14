@@ -5,4 +5,3 @@ Cython
 numpy
 scipy
 pyfits==3.1.2
-h5py

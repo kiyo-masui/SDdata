@@ -2,11 +2,13 @@
 
 import unittest
 import os
+from os import path
 
-import parse_ini
-import custom_exceptions as ce
+from sddata import parse_ini
 
-test_ini_file_name = 'testfile_parse_ini.ini'
+data_path = path.join(path.dirname(path.realpath( __file__ )), 'data')
+test_ini_file_name = path.join(data_path, 'parameters.ini')
+
 # This is a dictionary of parameters found in the above name file, copied
 # by hand.
 test_ini_dict = {'a_string' : 'string',
@@ -18,6 +20,8 @@ test_ini_dict = {'a_string' : 'string',
                  'd' : 3
                  }
 
+
+parse_ini.logger.setLevel(100)  # Supress all logging output.
 
 class TestInternal(unittest.TestCase) :
     
@@ -38,20 +42,19 @@ class TestReads(unittest.TestCase) :
     
     def test_parse_dict_reads(self) :
         self.out_dict = parse_ini.parse_dict(test_ini_dict, self.template_dict,
-                                             return_undeclared=False, 
-                                             feedback=0)
+                                             return_undeclared=False)
 
     def test_parse_readsfile(self) :
         self.out_dict = parse_ini.parse(test_ini_file_name, self.template_dict,
-                                        return_undeclared=False, checking=0)
+                                        return_undeclared=False)
 
     def test_parse_readsdict(self) :
         self.out_dict = parse_ini.parse(test_ini_dict, self.template_dict,
-                                        return_undeclared=False, checking=0)
+                                        return_undeclared=False)
 
     def test_defaults_None_ini(self) :
         self.out_dict = parse_ini.parse(None, test_ini_dict, 
-                                        return_undeclared=False, checking=0)
+                                        return_undeclared=False)
 
     def tearDown(self) :
         for key in self.template_dict.iterkeys() :
@@ -69,12 +72,10 @@ class TestDefaults(unittest.TestCase) :
         self.template_dict.update(self.extra_params)
 
     def test_parse_dict_defaults(self) :
-        self.out_dict = parse_ini.parse(test_ini_dict, self.template_dict,
-                                        checking=01)
+        self.out_dict = parse_ini.parse(test_ini_dict, self.template_dict)
 
     def test_parse_file_defaults(self) :
-        self.out_dict = parse_ini.parse(test_ini_file_name, self.template_dict,
-                                        checking=01)
+        self.out_dict = parse_ini.parse(test_ini_file_name, self.template_dict)
 
     def tearDown(self) :
         for key, value in self.template_dict.iteritems() :
@@ -89,14 +90,12 @@ class TestReturnsUndeclared(unittest.TestCase) :
     def test_parse_dict_undeclared(self) :
         self.out_dict, self.undeclared = parse_ini.parse(test_ini_dict,
                                              self.template_dict,
-                                             return_undeclared=True,
-                                             checking=01)
+                                             return_undeclared=True)
     
     def test_parse_file_undeclared(self) :
         self.out_dict, self.undeclared = parse_ini.parse(test_ini_file_name,
                                              self.template_dict,
-                                             return_undeclared=True,
-                                             checking=01)
+                                             return_undeclared=True)
 
     def tearDown(self) :
         for key, value in test_ini_dict.iteritems() :
@@ -116,7 +115,7 @@ class TestWriteParams(unittest.TestCase) :
         changed_ini['a_list'] = [5,6,7]
         copy_changed = dict(changed_ini)
         parse_ini.write_params(changed_ini, 'temp.ini')
-        read_ini = parse_ini.parse('temp.ini', test_ini_dict, checking = 01)
+        read_ini = parse_ini.parse('temp.ini', test_ini_dict)
         os.remove('temp.ini')
         for key, value in copy_changed.iteritems() :
             self.assertTrue(read_ini.has_key(key))
@@ -132,9 +131,9 @@ class TestExceptions(unittest.TestCase) :
                 ini_dict = dict(test_ini_dict)
                 ini_dict[key] = swapped
                 if not type(swapped) is type(value) :
-                    self.assertRaises(ce.FileParameterTypeError,
+                    self.assertRaises(parse_ini.ParameterTypeError,
                                       parse_ini.parse, ini_dict,
-                                      template_dict, checking=03)
+                                      template_dict, type_check=True)
 
 class TestPrefix(unittest.TestCase) :
     
@@ -157,8 +156,7 @@ class TestPrefix(unittest.TestCase) :
     def test_prefix(self) :
         out_dict, undeclared = parse_ini.parse(self.prefixed_ini_dict,
                                              self.params_init, prefix='tt_',
-                                             return_undeclared=True,
-                                             checking=01)
+                                             return_undeclared=True)
         self.assertEqual(out_dict['a_string'], 'string')
         self.assertEqual(out_dict['a'], 1)
         self.assertEqual(out_dict['b'], 10)
@@ -170,8 +168,7 @@ class TestPrefix(unittest.TestCase) :
         changed_ini = dict(self.params_init)
         changed_ini['a'] = 15
         parse_ini.write_params(changed_ini, 'temp.ini', prefix='tt_')
-        read_ini = parse_ini.parse('temp.ini', self.params_init, prefix='tt_',
-                                   checking = 01)
+        read_ini = parse_ini.parse('temp.ini', self.params_init, prefix='tt_')
         self.assertEqual(read_ini['a'], 15)
         self.assertEqual(read_ini['b'], 10)
         os.remove('temp.ini')

@@ -14,7 +14,6 @@
 import sys, os
 
 # Check if we are on readthedocs
-import os
 on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
 # Mock up modules missing on readthedocs.
@@ -59,12 +58,14 @@ if on_rtd:
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 # 'numpydoc' does not ship with sphinx. To get it use `pip install numpydoc`.
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.pngmath', 'sphinx.ext.mathjax',
-              'numpydoc', 'sphinx.ext.autosummary', 'sphinx.ext.viewcode']
+              'numpydoc', 'sphinx.ext.autosummary', 'sphinx.ext.viewcode',
+              'sphinx.ext.intersphinx']
 
 numpydoc_show_class_members = False
 import glob
 autosummary_generate = glob.glob("*.rst")
 
+intersphinx_mapping = {'caput': ('http://caput.readthedocs.org/en/latest/', None)}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
